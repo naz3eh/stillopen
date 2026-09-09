@@ -63,6 +63,15 @@ function localFakeResults(name: string): CheckResult[] {
   return rows;
 }
 
+const EXAMPLE_RESULTS: CheckResult[] = [
+  { label: "stillopen.com", kind: "domain", status: "taken", detail: "Registered" },
+  { label: "stillopen.io", kind: "domain", status: "taken", detail: "Registered" },
+  { label: "stillopen.dev", kind: "domain", status: "open", detail: "No public record found" },
+  { label: "stillopen.app", kind: "domain", status: "open", detail: "No public record found" },
+  { label: "stillopen.co", kind: "domain", status: "taken", detail: "Registered" },
+  { label: "github.com/stillopen", kind: "github", status: "unknown", detail: "We could not check this one" },
+];
+
 function StatusWord({ status }: { status: Status }) {
   if (status === "taken") {
     return (
@@ -82,6 +91,96 @@ function StatusWord({ status }: { status: Status }) {
     <span className="font-mono text-sm tracking-widest text-muted-foreground uppercase">
       Unknown
     </span>
+  );
+}
+
+function ResultRows({ results }: { results: CheckResult[] }) {
+  return (
+    <ul className="divide-y divide-border border-y-2 border-border">
+      {results.map((r, i) => (
+        <li
+          key={r.label}
+          className="flex animate-slam items-center justify-between gap-4 py-3.5"
+          style={{ animationDelay: `${i * 50}ms` }}
+        >
+          <div className="min-w-0">
+            <p className="truncate font-mono text-lg text-foreground">{r.label}</p>
+            <p
+              className={
+                r.status === "unknown"
+                  ? "text-sm text-muted-foreground/70 italic"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {r.detail}
+            </p>
+          </div>
+          <StatusWord status={r.status} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReportBlock({
+  name,
+  email,
+  setEmail,
+  onSubmit,
+  sending,
+  message,
+}: {
+  name: string;
+  email: string;
+  setEmail: (v: string) => void;
+  onSubmit: (e: FormEvent) => void;
+  sending: boolean;
+  message: string;
+}) {
+  return (
+    <section className="mt-8 border-2 border-border p-5">
+      <h2 className="text-xl font-bold text-foreground">
+        Want the full picture? <span className="text-open">$9</span>
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        A shareable report for “{name}” — every lookup, timestamped, in one link you can send to a co-founder.
+      </p>
+      <form onSubmit={onSubmit} className="mt-4 space-y-3">
+        <div>
+          <label
+            htmlFor="email"
+            className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase"
+          >
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            maxLength={255}
+            className="w-full border border-input bg-transparent px-4 py-3 font-mono text-base text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase">
+            Name checked
+          </label>
+          <p className="border border-border bg-muted px-4 py-3 font-mono text-base text-muted-foreground">
+            {name}
+          </p>
+        </div>
+        <button
+          type="submit"
+          disabled={sending}
+          className="w-full border-2 border-open px-5 py-3 text-base font-bold tracking-wide text-open uppercase transition-colors hover:bg-open hover:text-primary-foreground disabled:opacity-60"
+        >
+          Get the $9 report
+        </button>
+        {message && <p className="text-sm text-muted-foreground">{message}</p>}
+      </form>
+    </section>
   );
 }
 
@@ -141,7 +240,7 @@ function Index() {
       const res = await fetch("/api/save-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail, name: checkedName }),
+        body: JSON.stringify({ email: trimmedEmail, name: checkedName || "stillopen" }),
       });
       if (!res.ok) throw new Error(`save-intent failed: ${res.status}`);
       setIntentMessage("Checkout is not wired yet. No charge.");
@@ -152,18 +251,20 @@ function Index() {
     }
   }
 
+  const reportName = results ? checkedName : "stillopen";
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-5 pt-20 pb-10 sm:pt-28">
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-5 pt-16 pb-10 sm:pt-24">
       <header>
         <h1 className="font-display text-6xl font-bold tracking-tight text-foreground sm:text-7xl">
           Still<span className="text-open">open</span>
         </h1>
-        <p className="mt-3 text-lg text-muted-foreground">
+        <p className="mt-2 text-lg text-muted-foreground">
           Check if the name is still open.
         </p>
       </header>
 
-      <form onSubmit={runCheck} className="mt-10">
+      <form onSubmit={runCheck} className="mt-8">
         <label htmlFor="name" className="sr-only">
           Product name
         </label>
@@ -183,95 +284,60 @@ function Index() {
         <button
           type="submit"
           disabled={checking}
-          className="mt-4 w-full bg-primary px-5 py-4 text-xl font-bold tracking-wide text-primary-foreground uppercase transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
+          className="mt-3 w-full bg-primary px-5 py-4 text-xl font-bold tracking-wide text-primary-foreground uppercase transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
         >
           {checking ? "Checking…" : "Check"}
         </button>
       </form>
 
-      {results && (
-        <section aria-live="polite" className="mt-12">
+      {results ? (
+        <section aria-live="polite" className="mt-10">
           <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
             Results for “{checkedName}”
           </p>
-          <ul className="mt-3 divide-y divide-border border-y-2 border-border">
-            {results.map((r, i) => (
-              <li
-                key={r.label}
-                className="flex animate-slam items-center justify-between gap-4 py-4"
-                style={{ animationDelay: `${i * 60}ms` }}
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-lg text-foreground">{r.label}</p>
-                  <p
-                    className={
-                      r.status === "unknown"
-                        ? "text-sm text-muted-foreground/70 italic"
-                        : "text-sm text-muted-foreground"
-                    }
-                  >
-                    {r.detail}
-                  </p>
-                </div>
-                <StatusWord status={r.status} />
-              </li>
-            ))}
-          </ul>
+          <div className="mt-3">
+            <ResultRows results={results} />
+          </div>
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Open means the public lookup found nothing. It does not mean a registrar
-            will sell it.
+            Open means the public lookup found nothing. It does not mean a registrar will sell it.
           </p>
-
-          <section className="mt-10 border-2 border-border p-5">
-            <h2 className="text-xl font-bold text-foreground">
-              Want the full picture? <span className="text-open">$9</span>
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              A shareable report for “{checkedName}” — every lookup, timestamped, in
-              one link you can send to a co-founder.
+          <ReportBlock
+            name={reportName}
+            email={email}
+            setEmail={setEmail}
+            onSubmit={saveIntent}
+            sending={sendingIntent}
+            message={intentMessage}
+          />
+        </section>
+      ) : (
+        <section className="mt-10">
+          <div className="flex items-baseline justify-between">
+            <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
+              Example: stillopen
             </p>
-            <form onSubmit={saveIntent} className="mt-4 space-y-3">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase"
-                >
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  maxLength={255}
-                  className="w-full border border-input bg-transparent px-4 py-3 font-mono text-base text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase">
-                  Name checked
-                </label>
-                <p className="border border-border bg-muted px-4 py-3 font-mono text-base text-muted-foreground">
-                  {checkedName}
-                </p>
-              </div>
-              <button
-                type="submit"
-                disabled={sendingIntent}
-                className="w-full border-2 border-open px-5 py-3 text-base font-bold tracking-wide text-open uppercase transition-colors hover:bg-open hover:text-primary-foreground disabled:opacity-60"
-              >
-                Get the $9 report
-              </button>
-              {intentMessage && (
-                <p className="text-sm text-muted-foreground">{intentMessage}</p>
-              )}
-            </form>
-          </section>
+            <span className="font-mono text-[10px] tracking-widest text-muted-foreground/60 uppercase">
+              Not a live result
+            </span>
+          </div>
+          <div className="mt-3">
+            <ResultRows results={EXAMPLE_RESULTS} />
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            Open means the public lookup found nothing. It does not mean a registrar will sell it.
+          </p>
+          <ReportBlock
+            name={reportName}
+            email={email}
+            setEmail={setEmail}
+            onSubmit={saveIntent}
+            sending={sendingIntent}
+            message={intentMessage}
+          />
         </section>
       )}
 
-      <footer className="mt-auto pt-16">
+      <footer className="mt-auto pt-12">
         <p className="text-xs text-muted-foreground">
           Made by{" "}
           <a
