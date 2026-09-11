@@ -1,34 +1,51 @@
-# The Name Check
+# Stillopen
 
-Build Stillopen, a single-page name check by an indie maker named Sable. Not a generic SaaS dashboard. One screen, dark, sharp, a little loud. The whole product is the check.
+A small name check. Type a product name. See if it still looks open.
 
-What it does: a visitor types a product name and hits Check. The page calls POST /api/check with JSON { name }. The response is { results: [ { label, kind, status, detail } ] }. kind is domain or github. status is taken, open, or unknown. Show five domains (.com, .io, .dev, .app, .co) and GitHub as separate rows. taken is red and firm. open is a bright yes. unknown is quiet and says we could not check. Open means the public lookup found nothing. It does not mean a registrar will sell it. Put that sentence under the results in small type, always.
+Stillopen is the product. The maker is Sable.
 
-If /api/check is not implemented yet, stub it so the UI still renders fake results for the typed name, but keep the real fetch to /api/check first and fall back only if the request fails. Do not invent a live domain API of your own.
+The frontend is Next.js. It uses beUI Button, Input, and Animated Badge copied from https://beui.dev. Those components are open-source copy-paste under `components/motion`. Stillopen is not a beUI site.
 
-Below the results, a second block: a $9 shareable report. Fields are email and the name they just checked. Button label is Get the $9 report. Checkout is not wired. Never pretend a payment succeeded. On submit, POST /api/save-intent with { email, name }. If that fails, still show: Checkout is not wired yet. No charge. The $9 button must not say Paid or Success.
+A free check looks up public DNS and the public GitHub API. Results stay on screen. They are not stored.
 
-Visual direction: avoid beige templates, purple gradients, and card grids of feature bullets. Think a late-night indie product: near-black background, one tight column, a big wordmark Stillopen, a one-line line under it (Check if the name is still open), a huge input, one primary button. After a check, results slam in as a tight list, not a table of boxes. Small credit at the bottom: Sable, with a link to https://x.com/sablemakes. No pricing page, no login, no nav, no fake testimonials, no stock photos, no scholarship copy. Do not mention stillopen.vercel.app. Do not copy beUI or any other product's marketing.
+## Run
 
-Ship the first screen working with that layout and the check interaction.
+Needs Node 18 or newer.
 
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/1b956ea0-bad1-4fa1-954e-e2180e2c8e35).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+```bash
+npm install && npm run dev
 ```
+
+Nazeeh deploys manually. There is no live Stillopen URL in this repo.
+
+## What a check does
+
+The name is trimmed and lowercased. Empty names, spaces, dots, and characters that are not valid in a domain label are rejected, with a reason. A label is at most 63 characters, and cannot start or end with a hyphen.
+
+For a valid name the app checks:
+
+- DNS nameserver lookup for `name.com`, `name.io`, `name.dev`, `name.app`, `name.co`
+- GitHub user or org existence at the public GitHub API, with no token
+
+Results are only `taken`, `open`, or `couldnt-check`.
+
+Open means the public lookup found nothing. A domain can be registered and still have no DNS. This is not a registrar availability check.
+
+The page calls `POST /api/check` and `POST /api/save-intent`. Both routes use `lib/check.js`.
+
+## Payments (not wired)
+
+The page shows a **$9** shareable-report form. That UI is real. Checkout is not connected. The save path does not take a card, does not mark anything paid, and does not create a shareable report.
+
+`POST /api/save-intent` accepts JSON `{ name, email }` and answers honestly:
+
+- If `CHECKOUT_URL` is not a real `https` URL: checkout is not wired, nothing was charged, nothing was saved as a shareable report.
+- If `CHECKOUT_URL` is a real `https` URL: the response includes that URL as a link only. Nothing is paid. Opening the link is not a payment confirmation, and no report is saved.
+
+The endpoint does not write a pending note. Do not treat a local file as if a report was created.
+
+To wire checkout later, set a $9 one-time Lemon Squeezy or Stripe Payment Link in the environment. Still do not mark a report paid inside `POST /api/save-intent`. Wait for a webhook that confirms payment, then write the shareable report. Until that exists, every save stays unpaid and unsaved.
+
+## Not included
+
+No blog. No extra products. No accounts. No paid APIs. No API keys. No payment webhook. No saved reports.
