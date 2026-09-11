@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Share2, Sun } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { shareOnX } from "@/lib/shareOnX";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -227,6 +228,9 @@ function Index() {
   const [intentMessage, setIntentMessage] = useState("");
   const [sendingIntent, setSendingIntent] = useState(false);
 
+  const [sharing, setSharing] = useState(false);
+  const [shareHint, setShareHint] = useState("");
+
   async function runCheck(e: FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -243,6 +247,7 @@ function Index() {
     setResults(null);
     setCheckedName(trimmed);
     setIntentMessage("");
+    setShareHint("");
     try {
       const res = await fetch("/api/check", {
         method: "POST",
@@ -280,6 +285,24 @@ function Index() {
       setIntentMessage("Checkout is not wired yet. No charge.");
     } finally {
       setSendingIntent(false);
+    }
+  }
+
+  async function handleShareOnX() {
+    if (!results || !checkedName) return;
+    setSharing(true);
+    setShareHint("");
+    try {
+      const outcome = await shareOnX(checkedName, results);
+      if (outcome === "intent") {
+        setShareHint("Screenshot saved — attach it to the tweet.");
+        window.setTimeout(() => setShareHint(""), 6000);
+      }
+    } catch {
+      setShareHint("Could not prepare the share. Try again.");
+      window.setTimeout(() => setShareHint(""), 6000);
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -345,6 +368,24 @@ function Index() {
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
             Open means the public lookup found nothing. It does not mean a registrar will sell it.
           </p>
+          {results && (
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={handleShareOnX}
+                disabled={sharing}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-bold tracking-wide text-foreground uppercase transition-colors hover:border-open hover:text-open disabled:opacity-60"
+              >
+                <Share2 className="size-4" aria-hidden />
+                {sharing ? "Preparing…" : "Share on X"}
+              </button>
+              {shareHint && (
+                <p className="text-xs text-muted-foreground" role="status">
+                  {shareHint}
+                </p>
+              )}
+            </div>
+          )}
         </section>
       </div>
 
