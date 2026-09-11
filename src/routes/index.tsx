@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Moon, Share2, Sun } from "lucide-react";
+import { Copy, Moon, Share2, Sun } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { shareOnX } from "@/lib/shareOnX";
+import { copyShareCard, shareOnX } from "@/lib/shareOnX";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -229,6 +229,7 @@ function Index() {
   const [sendingIntent, setSendingIntent] = useState(false);
 
   const [sharing, setSharing] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [shareHint, setShareHint] = useState("");
 
   async function runCheck(e: FormEvent) {
@@ -306,6 +307,21 @@ function Index() {
     }
   }
 
+  async function handleCopyScreenshot() {
+    if (!results || !checkedName) return;
+    setCopying(true);
+    setShareHint("");
+    try {
+      const ok = await copyShareCard(checkedName, results);
+      setShareHint(ok ? "Screenshot copied." : "Could not copy. Try again.");
+    } catch {
+      setShareHint("Could not copy. Try again.");
+    } finally {
+      setCopying(false);
+      window.setTimeout(() => setShareHint(""), 4000);
+    }
+  }
+
   const reportName = results ? checkedName : "stillopen";
 
   return (
@@ -373,11 +389,20 @@ function Index() {
               <button
                 type="button"
                 onClick={handleShareOnX}
-                disabled={sharing}
+                disabled={sharing || copying}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-bold tracking-wide text-foreground uppercase transition-colors hover:border-open hover:text-open disabled:opacity-60"
               >
                 <Share2 className="size-4" aria-hidden />
                 {sharing ? "Preparing…" : "Share on X"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyScreenshot}
+                disabled={copying || sharing}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-bold tracking-wide text-foreground uppercase transition-colors hover:border-open hover:text-open disabled:opacity-60"
+              >
+                <Copy className="size-4" aria-hidden />
+                {copying ? "Copying…" : "Copy screenshot"}
               </button>
               {shareHint && (
                 <p className="text-xs text-muted-foreground" role="status">

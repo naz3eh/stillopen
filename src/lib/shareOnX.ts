@@ -195,7 +195,7 @@ function openIntent(text: string) {
   window.open(intent, "_blank", "noopener,noreferrer");
 }
 
-async function copyPng(blob: Blob): Promise<boolean> {
+export async function copyPng(blob: Blob): Promise<boolean> {
   try {
     if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) return false;
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
@@ -222,4 +222,10 @@ export async function shareOnX(name: string, results: ShareResultRow[]): Promise
   } catch {
     return "intent";
   }
+}
+
+/** Copy the results card PNG to the clipboard. No X compose. */
+export async function copyShareCard(name: string, results: ShareResultRow[]): Promise<boolean> {
+  const blob = await generateShareCardPng(name, results);
+  return copyPng(blob);
 }
