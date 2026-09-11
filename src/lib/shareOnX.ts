@@ -9,32 +9,54 @@ export interface ShareResultRow {
 export const STILLOPEN_URL = "https://stillopen-sigma.vercel.app";
 export const STILLOPEN_CREDIT = "@sablemakes";
 
+const STATUS_CODE: Record<ShareStatus, string> = {
+  taken: "t",
+  open: "o",
+  unknown: "u",
+};
+
+const CODE_STATUS: Record<string, ShareStatus> = {
+  t: "taken",
+  o: "open",
+  u: "unknown",
+};
+
+export function encodeStatusCodes(results: ShareResultRow[]): string {
+  return results.map((r) => STATUS_CODE[r.status] ?? "u").join("");
+}
+
+export function decodeStatusCodes(codes: string): ShareStatus[] {
+  return [...codes].map((c) => CODE_STATUS[c] ?? "unknown");
+}
+
+export function sharePageUrl(name: string, results: ShareResultRow[]): string {
+  const slug = name.trim().toLowerCase();
+  const r = encodeStatusCodes(results);
+  return `${STILLOPEN_URL}/s/${encodeURIComponent(slug)}?r=${encodeURIComponent(r)}`;
+}
+
+export function ogImageUrl(name: string, codes: string): string {
+  const slug = name.trim().toLowerCase();
+  const params = new URLSearchParams({ n: slug, r: codes });
+  return `${STILLOPEN_URL}/api/og?${params.toString()}`;
+}
+
+/** Pre-written tweet for the X compose draft. */
+export function buildTweetText(name: string, results: ShareResultRow[]): string {
+  return [
+    `I checked “${name}” and this is how its availability looks like.`,
+    "",
+    `via ${STILLOPEN_CREDIT}`,
+    "",
+    "check yours now here 👇",
+    sharePageUrl(name, results),
+  ].join("\n");
+}
+
 function statusWord(status: ShareStatus): string {
   if (status === "taken") return "Taken";
   if (status === "open") return "Open";
   return "Unknown";
-}
-
-function shortLabel(row: ShareResultRow): string {
-  if (row.kind === "github") return "GitHub";
-  const match = /\.(com|io|dev|app|co)$/i.exec(row.label);
-  return match ? `.${match[1]!.toLowerCase()}` : row.label;
-}
-
-/** Pre-written tweet for the X intent URL. Honest: Open = public lookup found nothing. */
-export function buildTweetText(name: string, results: ShareResultRow[]): string {
-  const summary = results.map((r) => `${shortLabel(r)} ${statusWord(r.status)}`).join(" · ");
-
-  return [
-    `I checked “${name}” on Stillopen:`,
-    "",
-    summary,
-    "",
-    "Open = public lookup found nothing.",
-    "",
-    STILLOPEN_URL,
-    `via ${STILLOPEN_CREDIT}`,
-  ].join("\n");
 }
 
 function roundRect(
@@ -61,11 +83,6 @@ function statusColors(status: ShareStatus): { fg: string; bg: string } {
   return { fg: "#8a8578", bg: "rgba(138, 133, 120, 0.14)" };
 }
 
-function safeFilename(name: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-  return `stillopen-${slug || "name"}.png`;
-}
-
 /** Draw a clean light share card and return a PNG blob. */
 export function generateShareCardPng(name: string, results: ShareResultRow[]): Promise<Blob> {
   const width = 1200;
@@ -76,7 +93,6 @@ export function generateShareCardPng(name: string, results: ShareResultRow[]): P
   const ctx = canvas.getContext("2d");
   if (!ctx) return Promise.reject(new Error("Canvas not supported"));
 
-  // Page background
   ctx.fillStyle = "#faf9f7";
   ctx.fillRect(0, 0, width, height);
 
@@ -96,7 +112,6 @@ export function generateShareCardPng(name: string, results: ShareResultRow[]): P
   const left = cardX + 56;
   let y = cardY + 78;
 
-  // Wordmark: Still + open
   ctx.font = '800 58px "Sora", ui-sans-serif, system-ui, sans-serif';
   ctx.fillStyle = "#2a2926";
   ctx.fillText("Still", left, y);
@@ -121,8 +136,6 @@ export function generateShareCardPng(name: string, results: ShareResultRow[]): P
   const rowsW = cardW - 80;
   const rowH = 78;
   const rowsTop = y;
-
-  // Rows container border
   const rowsBoxH = results.length * rowH;
   ctx.strokeStyle = "#e5e2db";
   ctx.lineWidth = 2;
@@ -161,7 +174,6 @@ export function generateShareCardPng(name: string, results: ShareResultRow[]): P
     ctx.fillText(pill, px + 14, py + 22);
   });
 
-  // Footer
   const footerY = cardY + cardH - 40;
   ctx.font = '500 22px "Manrope", ui-sans-serif, system-ui, sans-serif';
   ctx.fillStyle = "#7a7568";
@@ -178,57 +190,36 @@ export function generateShareCardPng(name: string, results: ShareResultRow[]): P
   });
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke after a tick so the download can start
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 function openIntent(text: string) {
   const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}`;
   window.open(intent, "_blank", "noopener,noreferrer");
 }
 
-export type ShareOnXOutcome = "shared" | "intent" | "aborted";
+async function copyPng(blob: Blob): Promise<boolean> {
+  try {
+    if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) return false;
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export type ShareOnXOutcome = "intent" | "intent-copied";
 
 /**
- * Prefer navigator.share with the PNG when supported; otherwise download the
- * PNG and open the X intent URL (media cannot be attached via query params).
+ * Open X compose immediately with prefilled text. Copy the results PNG so it
+ * can be pasted into the draft. The tweet URL is a share page whose OG image
+ * is the same card (X intent cannot attach media via query params).
  */
 export async function shareOnX(name: string, results: ShareResultRow[]): Promise<ShareOnXOutcome> {
   const text = buildTweetText(name, results);
-  const blob = await generateShareCardPng(name, results);
-  const filename = safeFilename(name);
-  const file = new File([blob], filename, { type: "image/png" });
-
-  try {
-    if (
-      typeof navigator !== "undefined" &&
-      typeof navigator.canShare === "function" &&
-      typeof navigator.share === "function" &&
-      navigator.canShare({ files: [file] })
-    ) {
-      await navigator.share({
-        text,
-        url: STILLOPEN_URL,
-        files: [file],
-      });
-      return "shared";
-    }
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      return "aborted";
-    }
-    // Fall through to download + intent
-  }
-
-  downloadBlob(blob, filename);
   openIntent(text);
-  return "intent";
+  try {
+    const blob = await generateShareCardPng(name, results);
+    const copied = await copyPng(blob);
+    return copied ? "intent-copied" : "intent";
+  } catch {
+    return "intent";
+  }
 }
