@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { Moon, Sun } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -72,23 +73,23 @@ const EXAMPLE_RESULTS: CheckResult[] = [
   { label: "github.com/stillopen", kind: "github", status: "unknown", detail: "We could not check this one" },
 ];
 
-function StatusWord({ status }: { status: Status }) {
+function StatusPill({ status }: { status: Status }) {
   if (status === "taken") {
     return (
-      <span className="font-mono text-sm font-bold tracking-widest text-taken uppercase">
+      <span className="rounded-full bg-taken/10 px-3 py-1 font-mono text-xs font-bold tracking-widest text-taken uppercase">
         Taken
       </span>
     );
   }
   if (status === "open") {
     return (
-      <span className="font-mono text-sm font-bold tracking-widest text-open uppercase">
+      <span className="rounded-full bg-open/10 px-3 py-1 font-mono text-xs font-bold tracking-widest text-open uppercase">
         Open
       </span>
     );
   }
   return (
-    <span className="font-mono text-sm tracking-widest text-muted-foreground uppercase">
+    <span className="rounded-full bg-muted px-3 py-1 font-mono text-xs tracking-widest text-muted-foreground uppercase">
       Unknown
     </span>
   );
@@ -96,15 +97,15 @@ function StatusWord({ status }: { status: Status }) {
 
 function ResultRows({ results }: { results: CheckResult[] }) {
   return (
-    <ul className="divide-y divide-border border-y-2 border-border">
+    <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
       {results.map((r, i) => (
         <li
           key={r.label}
-          className="flex animate-slam items-center justify-between gap-4 py-3.5"
+          className="flex animate-slam items-center justify-between gap-4 px-4 py-3"
           style={{ animationDelay: `${i * 50}ms` }}
         >
           <div className="min-w-0">
-            <p className="truncate font-mono text-lg text-foreground">{r.label}</p>
+            <p className="truncate font-mono text-base text-foreground">{r.label}</p>
             <p
               className={
                 r.status === "unknown"
@@ -115,7 +116,7 @@ function ResultRows({ results }: { results: CheckResult[] }) {
               {r.detail}
             </p>
           </div>
-          <StatusWord status={r.status} />
+          <StatusPill status={r.status} />
         </li>
       ))}
     </ul>
@@ -138,8 +139,8 @@ function ReportBlock({
   message: string;
 }) {
   return (
-    <section className="mt-8 border-2 border-border p-5">
-      <h2 className="text-xl font-bold text-foreground">
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h2 className="font-display text-lg font-bold text-foreground">
         Want the full picture? <span className="text-open">$9</span>
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -160,27 +161,58 @@ function ReportBlock({
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             maxLength={255}
-            className="w-full border border-input bg-transparent px-4 py-3 font-mono text-base text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
+            className="w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-base text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
           />
         </div>
         <div>
           <label className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase">
             Name checked
           </label>
-          <p className="border border-border bg-muted px-4 py-3 font-mono text-base text-muted-foreground">
+          <p className="rounded-lg border border-border bg-muted px-4 py-3 font-mono text-base text-muted-foreground">
             {name}
           </p>
         </div>
         <button
           type="submit"
           disabled={sending}
-          className="w-full border-2 border-open px-5 py-3 text-base font-bold tracking-wide text-open uppercase transition-colors hover:bg-open hover:text-primary-foreground disabled:opacity-60"
+          className="w-full rounded-lg border-2 border-open px-5 py-3 text-base font-bold tracking-wide text-open uppercase transition-colors hover:bg-open hover:text-primary-foreground disabled:opacity-60"
         >
           Get the $9 report
         </button>
         {message && <p className="text-sm text-muted-foreground">{message}</p>}
       </form>
     </section>
+  );
+}
+
+function ThemeToggle() {
+  const [dark, setDark] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("stillopen-theme");
+    const initial =
+      stored === "dark" ||
+      (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    setDark(initial);
+    document.documentElement.classList.toggle("dark", initial);
+  }, []);
+
+  function toggle() {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    window.localStorage.setItem("stillopen-theme", next ? "dark" : "light");
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+      className="rounded-full border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground"
+    >
+      {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+    </button>
   );
 }
 
@@ -254,90 +286,80 @@ function Index() {
   const reportName = results ? checkedName : "stillopen";
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-5 pt-16 pb-10 sm:pt-24">
-      <header>
-        <h1 className="font-display text-6xl font-bold tracking-tight text-foreground sm:text-7xl">
-          Still<span className="text-open">open</span>
-        </h1>
-        <p className="mt-2 text-lg text-muted-foreground">
-          Check if the name is still open.
-        </p>
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-5 pt-10 pb-10 sm:pt-14">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-5xl font-extrabold tracking-tight text-foreground sm:text-6xl">
+            Still<span className="text-open">open</span>
+          </h1>
+          <p className="mt-2 text-lg text-muted-foreground">
+            Check if the name is still open.
+          </p>
+        </div>
+        <ThemeToggle />
       </header>
 
-      <form onSubmit={runCheck} className="mt-8">
-        <label htmlFor="name" className="sr-only">
-          Product name
-        </label>
-        <input
-          id="name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="yourproduct"
-          autoComplete="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          maxLength={63}
-          className="w-full border-2 border-input bg-transparent px-5 py-5 font-mono text-2xl text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
-        />
-        {error && <p className="mt-2 font-mono text-sm text-taken">{error}</p>}
-        <button
-          type="submit"
-          disabled={checking}
-          className="mt-3 w-full bg-primary px-5 py-4 text-xl font-bold tracking-wide text-primary-foreground uppercase transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
-        >
-          {checking ? "Checking…" : "Check"}
-        </button>
-      </form>
-
-      {results ? (
-        <section aria-live="polite" className="mt-10">
-          <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
-            Results for “{checkedName}”
-          </p>
-          <div className="mt-3">
-            <ResultRows results={results} />
+      <div className="mt-8 rounded-2xl border border-border bg-secondary/50 p-4 shadow-sm sm:p-5">
+        <form onSubmit={runCheck}>
+          <label htmlFor="name" className="sr-only">
+            Product name
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="yourproduct"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              maxLength={63}
+              className="w-full rounded-xl border border-input bg-card px-4 py-4 font-mono text-xl text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={checking}
+              className="rounded-xl bg-primary px-6 py-4 text-lg font-bold tracking-wide text-primary-foreground uppercase transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 sm:shrink-0"
+            >
+              {checking ? "Checking…" : "Check"}
+            </button>
           </div>
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Open means the public lookup found nothing. It does not mean a registrar will sell it.
-          </p>
-          <ReportBlock
-            name={reportName}
-            email={email}
-            setEmail={setEmail}
-            onSubmit={saveIntent}
-            sending={sendingIntent}
-            message={intentMessage}
-          />
-        </section>
-      ) : (
-        <section className="mt-10">
+          {error && <p className="mt-2 font-mono text-sm text-taken">{error}</p>}
+        </form>
+
+        <section aria-live="polite" className="mt-5">
           <div className="flex items-baseline justify-between">
             <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
-              Example: stillopen
+              {results ? `Results for “${checkedName}”` : "Example: stillopen"}
             </p>
-            <span className="font-mono text-[10px] tracking-widest text-muted-foreground/60 uppercase">
-              Not a live result
-            </span>
+            {!results && (
+              <span className="font-mono text-[10px] tracking-widest text-muted-foreground/60 uppercase">
+                Not a live result
+              </span>
+            )}
           </div>
           <div className="mt-3">
-            <ResultRows results={EXAMPLE_RESULTS} />
+            <ResultRows results={results ?? EXAMPLE_RESULTS} />
           </div>
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
             Open means the public lookup found nothing. It does not mean a registrar will sell it.
           </p>
-          <ReportBlock
-            name={reportName}
-            email={email}
-            setEmail={setEmail}
-            onSubmit={saveIntent}
-            sending={sendingIntent}
-            message={intentMessage}
-          />
         </section>
-      )}
+      </div>
 
-      <footer className="mt-auto pt-12">
+      <div className="mt-4">
+        <ReportBlock
+          name={reportName}
+          email={email}
+          setEmail={setEmail}
+          onSubmit={saveIntent}
+          sending={sendingIntent}
+          message={intentMessage}
+        />
+      </div>
+
+      <footer className="mt-auto pt-10">
         <p className="text-xs text-muted-foreground">
           Made by{" "}
           <a
