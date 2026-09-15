@@ -62,7 +62,7 @@ function buildSvg(name: string, codes: string): string {
   <text x="88" y="182" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="32" font-weight="700" fill="#2a2926">${xml(slug)}</text>
   <rect x="88" y="${rowsTop}" width="1024" height="${rowH * 6}" rx="16" fill="none" stroke="#e5e2db" stroke-width="2"/>
   ${rowNodes}
-  <text x="88" y="575" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" fill="#7a7568">@sablemakes  ·  stillopen-sigma.vercel.app</text>
+  <text x="88" y="575" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" fill="#7a7568">@sablemakes  ·  stillopen.naz3eh.com</text>
 </svg>`;
 }
 

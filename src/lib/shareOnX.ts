@@ -6,7 +6,7 @@ export interface ShareResultRow {
   status: ShareStatus;
 }
 
-export const STILLOPEN_URL = "https://stillopen-sigma.vercel.app";
+export const STILLOPEN_URL = "https://stillopen.naz3eh.com";
 export const STILLOPEN_CREDIT = "@sablemakes";
 
 const STATUS_CODE: Record<ShareStatus, string> = {
@@ -177,7 +177,7 @@ export function generateShareCardPng(name: string, results: ShareResultRow[]): P
   const footerY = cardY + cardH - 40;
   ctx.font = '500 22px "Manrope", ui-sans-serif, system-ui, sans-serif';
   ctx.fillStyle = "#7a7568";
-  ctx.fillText(`${STILLOPEN_CREDIT}  ·  stillopen-sigma.vercel.app`, left, footerY);
+  ctx.fillText(`${STILLOPEN_CREDIT}  ·  stillopen.naz3eh.com`, left, footerY);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
