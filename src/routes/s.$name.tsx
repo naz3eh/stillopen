@@ -122,12 +122,12 @@ function SharePage() {
         <p className="text-xs text-muted-foreground">
           Made by{" "}
           <a
-            href="https://x.com/sablemakes"
+            href="https://x.com/naz3eh"
             target="_blank"
             rel="noopener noreferrer"
             className="text-foreground underline underline-offset-4 hover:text-open"
           >
-            Sable
+            Nazeeh
           </a>
         </p>
       </footer>
