@@ -1,5 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Copy, Moon, Share2, Sun } from "lucide-react";
+import {
+  CRYPTO_PAY_ADDRESS,
+  CRYPTO_PAY_AMOUNT_USD,
+  CRYPTO_PAY_ASSETS,
+  CRYPTO_PAY_ENS,
+} from "@/lib/cryptoPay";
 import { useEffect, useState, type FormEvent } from "react";
 import { copyShareCard, shareOnX } from "@/lib/shareOnX";
 
@@ -128,32 +134,68 @@ function ReportBlock({
   name,
   email,
   setEmail,
+  txHash,
+  setTxHash,
   onSubmit,
   sending,
   message,
+  onCopyPayTo,
+  copyHint,
 }: {
   name: string;
   email: string;
   setEmail: (v: string) => void;
+  txHash: string;
+  setTxHash: (v: string) => void;
   onSubmit: (e: FormEvent) => void;
   sending: boolean;
   message: string;
+  onCopyPayTo: () => void;
+  copyHint: string;
 }) {
   return (
     <section className="rounded-xl border border-border bg-card p-5">
       <h2 className="font-display text-lg font-bold text-foreground">
-        Want the full picture? <span className="text-open">$9</span>
+        Want the full picture? <span className="text-open">{"$"}{CRYPTO_PAY_AMOUNT_USD}</span>
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         A shareable report for “{name}” — every lookup, timestamped, in one link you can send to a co-founder.
       </p>
+
+      <div className="mt-4 rounded-lg border border-border bg-muted/50 p-4">
+        <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
+          Pay with crypto
+        </p>
+        <p className="mt-2 text-sm text-foreground">
+          Send {"$"}{CRYPTO_PAY_AMOUNT_USD} in {CRYPTO_PAY_ASSETS} to{" "}
+          <span className="font-mono font-bold">{CRYPTO_PAY_ENS}</span>.
+        </p>
+        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{CRYPTO_PAY_ADDRESS}</p>
+        <button
+          type="button"
+          onClick={onCopyPayTo}
+          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold tracking-wide text-foreground uppercase transition-colors hover:border-open hover:text-open"
+        >
+          <Copy className="size-3.5" aria-hidden />
+          Copy {CRYPTO_PAY_ENS}
+        </button>
+        {copyHint && (
+          <p className="mt-2 text-xs text-muted-foreground" role="status">
+            {copyHint}
+          </p>
+        )}
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Card checkout (Dodo) is pending approval. Crypto is the interim path. The report is emailed after payment is confirmed — not automatic yet.
+        </p>
+      </div>
+
       <form onSubmit={onSubmit} className="mt-4 space-y-3">
         <div>
           <label
             htmlFor="email"
             className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase"
           >
-            Email
+            Email for the report
           </label>
           <input
             id="email"
@@ -163,6 +205,25 @@ function ReportBlock({
             placeholder="you@example.com"
             maxLength={255}
             className="w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-base text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="txHash"
+            className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase"
+          >
+            Tx hash (optional)
+          </label>
+          <input
+            id="txHash"
+            type="text"
+            value={txHash}
+            onChange={(e) => setTxHash(e.target.value)}
+            placeholder="0x…"
+            maxLength={66}
+            spellCheck={false}
+            autoCapitalize="off"
+            className="w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
           />
         </div>
         <div>
@@ -178,7 +239,7 @@ function ReportBlock({
           disabled={sending}
           className="w-full rounded-lg border-2 border-open px-5 py-3 text-base font-bold tracking-wide text-open uppercase transition-colors hover:bg-open hover:text-primary-foreground disabled:opacity-60"
         >
-          Get the $9 report
+          {sending ? "Sending…" : "I've paid — request report"}
         </button>
         {message && <p className="text-sm text-muted-foreground">{message}</p>}
       </form>
@@ -225,8 +286,10 @@ function Index() {
   const [error, setError] = useState("");
 
   const [email, setEmail] = useState("");
+  const [txHash, setTxHash] = useState("");
   const [intentMessage, setIntentMessage] = useState("");
   const [sendingIntent, setSendingIntent] = useState(false);
+  const [payCopyHint, setPayCopyHint] = useState("");
 
   const [sharing, setSharing] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -248,6 +311,7 @@ function Index() {
     setResults(null);
     setCheckedName(trimmed);
     setIntentMessage("");
+    setTxHash("");
     setShareHint("");
     try {
       const res = await fetch("/api/check", {
@@ -269,8 +333,13 @@ function Index() {
   async function saveIntent(e: FormEvent) {
     e.preventDefault();
     const trimmedEmail = email.trim();
+    const trimmedTx = txHash.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail) || trimmedEmail.length > 255) {
       setIntentMessage("Enter a valid email.");
+      return;
+    }
+    if (trimmedTx && !/^0x[a-fA-F0-9]{64}$/.test(trimmedTx)) {
+      setIntentMessage("Tx hash looks invalid. Paste a full 0x… hash, or leave it blank.");
       return;
     }
     setSendingIntent(true);
@@ -278,15 +347,44 @@ function Index() {
       const res = await fetch("/api/save-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail, name: checkedName || "stillopen" }),
+        body: JSON.stringify({
+          email: trimmedEmail,
+          name: checkedName || "stillopen",
+          txHash: trimmedTx || undefined,
+          paymentMethod: "crypto",
+        }),
       });
-      if (!res.ok) throw new Error(`save-intent failed: ${res.status}`);
-      setIntentMessage("Checkout is not wired yet. No charge.");
+      const data = (await res.json().catch(() => null)) as { message?: string } | null;
+      if (!res.ok) {
+        setIntentMessage(data?.message || "Could not save your request. Try again.");
+        return;
+      }
+      setIntentMessage(
+        data?.message ||
+          `Got it. Send $${CRYPTO_PAY_AMOUNT_USD} in ${CRYPTO_PAY_ASSETS} to ${CRYPTO_PAY_ENS}. We will email the report after confirming.`,
+      );
     } catch {
-      setIntentMessage("Checkout is not wired yet. No charge.");
+      setIntentMessage(
+        `Could not reach the server. You can still pay ${CRYPTO_PAY_ENS} and DM @sablemakes with your email + tx.`,
+      );
     } finally {
       setSendingIntent(false);
     }
+  }
+
+  async function copyPayTo() {
+    try {
+      await navigator.clipboard.writeText(CRYPTO_PAY_ENS);
+      setPayCopyHint("Copied nazeeh.eth.");
+    } catch {
+      try {
+        await navigator.clipboard.writeText(CRYPTO_PAY_ADDRESS);
+        setPayCopyHint("Copied wallet address.");
+      } catch {
+        setPayCopyHint("Could not copy. Select the address above.");
+      }
+    }
+    window.setTimeout(() => setPayCopyHint(""), 3000);
   }
 
   async function handleShareOnX() {
@@ -419,9 +517,13 @@ function Index() {
           name={reportName}
           email={email}
           setEmail={setEmail}
+          txHash={txHash}
+          setTxHash={setTxHash}
           onSubmit={saveIntent}
           sending={sendingIntent}
           message={intentMessage}
+          onCopyPayTo={copyPayTo}
+          copyHint={payCopyHint}
         />
       </div>
 
@@ -429,12 +531,12 @@ function Index() {
         <p className="text-xs text-muted-foreground">
           Made by{" "}
           <a
-            href="https://x.com/sablemakes"
+            href="https://x.com/naz3eh"
             target="_blank"
             rel="noopener noreferrer"
             className="text-foreground underline underline-offset-4 hover:text-open"
           >
-            Sable
+            Nazeeh
           </a>
         </p>
       </footer>
