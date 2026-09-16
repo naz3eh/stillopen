@@ -1,15 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CRYPTO_PAY_ENS } from "@/lib/cryptoPay";
+import { verifyCryptoPayment } from "@/lib/verifyPayment";
 
 type Body = {
   email?: string;
   name?: string;
   txHash?: string;
+  txLink?: string;
   paymentMethod?: string;
 };
 
 function bad(message: string, status = 400) {
-  return Response.json({ ok: false, message }, { status });
+  return Response.json({ ok: false, paid: false, message }, { status });
 }
 
 export const Route = createFileRoute("/api/save-intent")({
@@ -25,30 +27,36 @@ export const Route = createFileRoute("/api/save-intent")({
 
         const email = typeof body.email === "string" ? body.email.trim() : "";
         const name = typeof body.name === "string" ? body.name.trim().toLowerCase() : "";
-        const txHash = typeof body.txHash === "string" ? body.txHash.trim() : "";
+        const txInput =
+          (typeof body.txLink === "string" && body.txLink.trim()) ||
+          (typeof body.txHash === "string" && body.txHash.trim()) ||
+          "";
 
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
+        if (!email || !/^\S+@\S+\.\S+$/.test(email) || email.length > 255) {
           return bad("Enter a valid email.");
         }
         if (!name || name.length > 63 || !/^[a-z0-9-]+$/.test(name)) {
           return bad("Invalid name.");
         }
-        if (txHash && !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
-          return bad("Tx hash looks invalid. Paste a full 0x… hash, or leave it blank.");
+        if (!txInput) {
+          return bad("Transaction link is required. Paste your Etherscan tx URL or 0x hash.");
         }
 
-        // Manual fulfill for now. Do not claim payment succeeded.
-        const message = txHash
-          ? `Got it. Pay to ${CRYPTO_PAY_ENS} if you have not already. We will email the shareable report after confirming the payment. Not automatic yet.`
-          : `Got it. Send $9 in USDC (Ethereum) or ETH to ${CRYPTO_PAY_ENS}, then reply with the tx hash if you can. We will email the shareable report after confirming. Not automatic yet.`;
+        const verified = await verifyCryptoPayment(txInput);
+        if (!verified.ok) {
+          return bad(verified.message);
+        }
 
         return Response.json({
           ok: true,
-          paid: false,
+          paid: true,
           paymentMethod: "crypto",
+          asset: verified.asset,
+          amountLabel: verified.amountLabel,
+          txHash: verified.txHash,
           payTo: CRYPTO_PAY_ENS,
           name,
-          message,
+          message: `Payment verified on-chain (${verified.amountLabel}). We will email the shareable report for “${name}” to ${email}.`,
         });
       },
     },
