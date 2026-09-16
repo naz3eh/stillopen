@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useAppKit, useAppKitAccount, useDisconnect } from "@reown/appkit/react";
 import {
-  createPublicClient,
-  createWalletClient,
-  custom,
-  erc20Abi,
-  http,
-  type Address,
-  type Hash,
-} from "viem";
-import { mainnet } from "viem/chains";
+  useSwitchChain,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
+import { mainnet } from "wagmi/chains";
+import { erc20Abi, type Address, type Hash } from "viem";
 import {
   CRYPTO_PAY_ADDRESS,
   CRYPTO_PAY_AMOUNT_USD,
@@ -24,18 +22,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type EthereumProvider = {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-  on?: (event: string, handler: (...args: unknown[]) => void) => void;
-  removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
-};
-
-function getEthereum(): EthereumProvider | null {
-  if (typeof window === "undefined") return null;
-  const eth = (window as unknown as { ethereum?: EthereumProvider }).ethereum;
-  return eth ?? null;
-}
-
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,109 +31,79 @@ type Props = {
 };
 
 export function PayModal({ open, onOpenChange, name, email, setEmail }: Props) {
-  const [address, setAddress] = useState<Address | null>(null);
-  const [chainId, setChainId] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [payHash, setPayHash] = useState<Hash | null>(null);
-  const [message, setMessage] = useState("");
-  const [submittedFor, setSubmittedFor] = useState<string | null>(null);
+  const { open: openAppKit } = useAppKit();
+  const { address, isConnected } = useAppKitAccount();
+  const { disconnect } = useDisconnect();
+  const { switchChainAsync, isPending: switching } = useSwitchChain();
+  const {
+    writeContractAsync,
+    data: payHash,
+    isPending: paying,
+    error: payError,
+    reset: resetWrite,
+  } = useWriteContract();
+  const { isLoading: confirming, isSuccess: confirmed } = useWaitForTransactionReceipt({
+    hash: payHash,
+  });
 
-  const refreshChain = useCallback(async () => {
-    const eth = getEthereum();
-    if (!eth) return;
-    const hex = (await eth.request({ method: "eth_chainId" })) as string;
-    setChainId(Number.parseInt(hex, 16));
-  }, []);
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submittedFor, setSubmittedFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setMessage("");
-      setPayHash(null);
       setSubmittedFor(null);
-      setBusy(false);
+      resetWrite();
     }
-  }, [open]);
+  }, [open, resetWrite]);
 
   useEffect(() => {
-    const eth = getEthereum();
-    if (!eth?.on) return;
-    const onAccounts = (accounts: unknown) => {
-      const list = accounts as string[];
-      setAddress(list?.[0] ? (list[0] as Address) : null);
-    };
-    const onChain = (hex: unknown) => {
-      setChainId(Number.parseInt(String(hex), 16));
-    };
-    eth.on("accountsChanged", onAccounts);
-    eth.on("chainChanged", onChain);
-    return () => {
-      eth.removeListener?.("accountsChanged", onAccounts);
-      eth.removeListener?.("chainChanged", onChain);
-    };
-  }, []);
-
-  async function handleConnect() {
-    const eth = getEthereum();
-    if (!eth) {
-      setMessage("No browser wallet found. Install MetaMask or Rabby, then retry.");
+    if (!confirmed || !payHash || !address || submittedFor === payHash) return;
+    const trimmedEmail = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail) || trimmedEmail.length > 255) {
+      setMessage("Enter a valid email before we can send the report.");
       return;
     }
-    setBusy(true);
-    setMessage("");
-    try {
-      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
-      if (!accounts?.[0]) {
-        setMessage("No account returned from wallet.");
-        return;
-      }
-      setAddress(accounts[0] as Address);
-      await refreshChain();
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not connect wallet.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
-  function handleDisconnect() {
-    setAddress(null);
-    setPayHash(null);
-    setSubmittedFor(null);
-    setMessage("");
-  }
-
-  async function ensureMainnet(eth: EthereumProvider) {
-    const hex = (await eth.request({ method: "eth_chainId" })) as string;
-    const id = Number.parseInt(hex, 16);
-    setChainId(id);
-    if (id === mainnet.id) return;
-    try {
-      await eth.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x1" }],
-      });
-      setChainId(mainnet.id);
-    } catch (e) {
-      const err = e as { code?: number };
-      if (err?.code === 4902) {
-        await eth.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: "0x1",
-              chainName: "Ethereum Mainnet",
-              nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-              rpcUrls: ["https://ethereum.publicnode.com"],
-              blockExplorerUrls: ["https://etherscan.io"],
-            },
-          ],
+    let cancelled = false;
+    (async () => {
+      setSubmitting(true);
+      setMessage("Payment landed. Verifying on-chain…");
+      try {
+        const res = await fetch("/api/save-intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: trimmedEmail,
+            name,
+            txHash: payHash,
+            walletAddress: address,
+            paymentMethod: "crypto",
+          }),
         });
-        setChainId(mainnet.id);
-        return;
+        const data = (await res.json().catch(() => null)) as {
+          message?: string;
+          paid?: boolean;
+        } | null;
+        if (cancelled) return;
+        if (!res.ok || !data?.paid) {
+          setMessage(data?.message || "Payment could not be verified. Try again.");
+          return;
+        }
+        setSubmittedFor(payHash);
+        setMessage(data.message || "Payment verified. Report email coming.");
+      } catch {
+        if (!cancelled) setMessage("Could not reach the server. Try again.");
+      } finally {
+        if (!cancelled) setSubmitting(false);
       }
-      throw e instanceof Error ? e : new Error("Switch to Ethereum mainnet in your wallet.");
-    }
-  }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmed, payHash, address, email, name, submittedFor]);
 
   async function handlePay() {
     const trimmedEmail = email.trim();
@@ -155,72 +111,33 @@ export function PayModal({ open, onOpenChange, name, email, setEmail }: Props) {
       setMessage("Enter a valid email for the report first.");
       return;
     }
-    const eth = getEthereum();
-    if (!eth || !address) {
-      setMessage("Connect your wallet first.");
+    if (!isConnected || !address) {
+      setMessage("Connect a wallet first.");
       return;
     }
-
-    setBusy(true);
     setMessage("");
-    setPayHash(null);
     setSubmittedFor(null);
     try {
-      await ensureMainnet(eth);
-      const walletClient = createWalletClient({
-        account: address,
-        chain: mainnet,
-        transport: custom(eth),
-      });
-      const hash = await walletClient.writeContract({
+      await switchChainAsync({ chainId: mainnet.id });
+    } catch {
+      // Wallet may already be on mainnet or reject; writeContract will fail clearly.
+    }
+    try {
+      await writeContractAsync({
         address: USDC_ETH_ADDRESS,
         abi: erc20Abi,
         functionName: "transfer",
         args: [CRYPTO_PAY_ADDRESS as Address, MIN_USDC_UNITS],
-        chain: mainnet,
-        account: address,
+        chainId: mainnet.id,
       });
-      setPayHash(hash);
-      setMessage("Waiting for confirmation…");
-
-      const publicClient = createPublicClient({
-        chain: mainnet,
-        transport: http("https://ethereum.publicnode.com"),
-      });
-      await publicClient.waitForTransactionReceipt({ hash });
-
-      setMessage("Payment landed. Verifying on-chain…");
-      const res = await fetch("/api/save-intent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          name,
-          txHash: hash,
-          walletAddress: address,
-          paymentMethod: "crypto",
-        }),
-      });
-      const data = (await res.json().catch(() => null)) as {
-        message?: string;
-        paid?: boolean;
-      } | null;
-      if (!res.ok || !data?.paid) {
-        setMessage(data?.message || "Payment could not be verified. Try again.");
-        return;
-      }
-      setSubmittedFor(hash);
-      setMessage(data.message || "Payment verified. Report email coming.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Payment failed.";
       setMessage(msg.slice(0, 220));
-    } finally {
-      setBusy(false);
     }
   }
 
+  const busy = switching || paying || confirming || submitting;
   const short = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
-  const onMainnet = chainId === mainnet.id;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -231,9 +148,9 @@ export function PayModal({ open, onOpenChange, name, email, setEmail }: Props) {
             {CRYPTO_PAY_AMOUNT_USD} for “{name}”
           </DialogTitle>
           <DialogDescription className="text-left text-sm text-muted-foreground">
-            Connect your wallet and send {"$"}
-            {CRYPTO_PAY_AMOUNT_USD} USDC on Ethereum to {CRYPTO_PAY_ENS}. We verify that exact
-            payment on-chain before emailing the report.
+            Connect any wallet (MetaMask, Coinbase, WalletConnect QR, and more), then send {"$"}
+            {CRYPTO_PAY_AMOUNT_USD} USDC on Ethereum to {CRYPTO_PAY_ENS}. We verify that payment
+            on-chain before emailing the report.
           </DialogDescription>
         </DialogHeader>
 
@@ -247,7 +164,7 @@ export function PayModal({ open, onOpenChange, name, email, setEmail }: Props) {
           </p>
           <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{CRYPTO_PAY_ADDRESS}</p>
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Old transaction links are not accepted. You must send a fresh payment from the connected
+            Old transaction links are not accepted. Connect and send a fresh payment from your
             wallet.
           </p>
         </div>
@@ -272,25 +189,27 @@ export function PayModal({ open, onOpenChange, name, email, setEmail }: Props) {
             />
           </div>
 
-          {!address ? (
+          {!isConnected ? (
             <button
               type="button"
-              onClick={handleConnect}
+              onClick={() => {
+                setMessage("");
+                openAppKit({ view: "Connect" });
+              }}
               disabled={busy}
               className="w-full rounded-lg border-2 border-open px-5 py-3 text-base font-bold tracking-wide text-open uppercase transition-colors hover:bg-open hover:text-primary-foreground disabled:opacity-60"
             >
-              {busy ? "Connecting…" : "Connect wallet"}
+              Connect wallet
             </button>
           ) : (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2">
                 <p className="font-mono text-xs text-muted-foreground">
                   Connected <span className="text-foreground">{short}</span>
-                  {chainId != null && !onMainnet ? " · wrong network" : ""}
                 </p>
                 <button
                   type="button"
-                  onClick={handleDisconnect}
+                  onClick={() => disconnect()}
                   className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase hover:text-foreground"
                 >
                   Disconnect
@@ -302,24 +221,35 @@ export function PayModal({ open, onOpenChange, name, email, setEmail }: Props) {
                 disabled={busy || Boolean(submittedFor)}
                 className="w-full rounded-lg border-2 border-open px-5 py-3 text-base font-bold tracking-wide text-open uppercase transition-colors hover:bg-open hover:text-primary-foreground disabled:opacity-60"
               >
-                {busy
-                  ? payHash
-                    ? "Confirming…"
-                    : "Confirm in wallet…"
-                  : submittedFor
-                    ? "Paid"
-                    : `Pay $${CRYPTO_PAY_AMOUNT_USD} USDC`}
+                {paying
+                  ? "Confirm in wallet…"
+                  : confirming
+                    ? "Waiting for confirmation…"
+                    : submitting
+                      ? "Verifying…"
+                      : submittedFor
+                        ? "Paid"
+                        : `Pay $${CRYPTO_PAY_AMOUNT_USD} USDC`}
+              </button>
+              <button
+                type="button"
+                onClick={() => openAppKit({ view: "Account" })}
+                className="w-full font-mono text-[10px] tracking-widest text-muted-foreground uppercase hover:text-foreground"
+              >
+                Wallet details
               </button>
             </div>
           )}
 
           {payHash && (
-            <p className="break-all font-mono text-[10px] text-muted-foreground">Tx: {payHash}</p>
+            <p className="break-all font-mono text-[10px] text-muted-foreground">
+              Tx: {payHash as Hash}
+            </p>
           )}
 
-          {message && (
+          {(message || payError) && (
             <p className="text-sm text-muted-foreground" role="status">
-              {message}
+              {message || payError?.message?.slice(0, 200)}
             </p>
           )}
         </div>
