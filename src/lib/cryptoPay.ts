@@ -7,7 +7,7 @@ export const CRYPTO_PAY_ASSETS = "USDC (Ethereum) or ETH";
 /** Ethereum mainnet USDC (Circle). */
 export const USDC_ETH_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
-/** keccak256("Transfer(address,uint256)") */
+/** keccak256("Transfer(address,address,uint256)") */
 export const ERC20_TRANSFER_TOPIC =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 

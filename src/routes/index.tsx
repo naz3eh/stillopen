@@ -29,7 +29,8 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Stillopen — Check if the name is still open" },
       {
         property: "og:description",
-        content: "Type a product name. See if the domains and the GitHub handle are still open.",
+        content:
+          "Type a product name. See if the domains and the GitHub handle are still open.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -120,7 +121,13 @@ function ResultRows({ results }: { results: CheckResult[] }) {
         >
           <div className="min-w-0">
             <p className="truncate font-mono text-base text-foreground">{r.label}</p>
-            <p className={r.status === "unknown" ? "text-sm text-muted-foreground/70 italic" : "text-sm text-muted-foreground"}>
+            <p
+              className={
+                r.status === "unknown"
+                  ? "text-sm text-muted-foreground/70 italic"
+                  : "text-sm text-muted-foreground"
+              }
+            >
               {r.detail}
             </p>
           </div>
@@ -138,7 +145,8 @@ function ReportTeaser({ name, onOpen }: { name: string; onOpen: () => void }) {
         Want the full picture? <span className="text-open">{"$"}{CRYPTO_PAY_AMOUNT_USD}</span>
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        A shareable report for “{name}” — every lookup, timestamped, in one link you can send to a co-founder. Pay with crypto to {CRYPTO_PAY_ENS}.
+        A shareable report for “{name}” — every lookup, timestamped, in one link you can send to a
+        co-founder. Pay with crypto to {CRYPTO_PAY_ENS}.
       </p>
       <button
         type="button"
@@ -186,7 +194,8 @@ function PayModal({
             Pay {"$"}{CRYPTO_PAY_AMOUNT_USD} for “{name}”
           </DialogTitle>
           <DialogDescription className="text-left text-sm text-muted-foreground">
-            Send crypto, paste the transaction link, and we verify it on Ethereum before emailing the report.
+            Send crypto, paste the transaction link, and we verify it on Ethereum before emailing
+            the report.
           </DialogDescription>
         </DialogHeader>
 
@@ -212,13 +221,17 @@ function PayModal({
             </p>
           )}
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Ethereum mainnet only. We check the tx on-chain (USDC transfer or ETH to this address ≥ ~${CRYPTO_PAY_AMOUNT_USD}).
+            Ethereum mainnet only. We check the tx on-chain (USDC transfer or ETH to this address ≥ ~$
+            {CRYPTO_PAY_AMOUNT_USD}).
           </p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-3">
           <div>
-            <label htmlFor="pay-email" className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase">
+            <label
+              htmlFor="pay-email"
+              className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase"
+            >
               Email for the report
             </label>
             <input
@@ -233,7 +246,10 @@ function PayModal({
             />
           </div>
           <div>
-            <label htmlFor="tx-link" className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase">
+            <label
+              htmlFor="tx-link"
+              className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase"
+            >
               Transaction link (required)
             </label>
             <input
@@ -268,7 +284,9 @@ function ThemeToggle() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem("stillopen-theme");
-    const initial = stored === "dark" || (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const initial =
+      stored === "dark" ||
+      (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     setDark(initial);
     document.documentElement.classList.toggle("dark", initial);
   }, []);
@@ -369,7 +387,10 @@ function Index() {
           paymentMethod: "crypto",
         }),
       });
-      const data = (await res.json().catch(() => null)) as { message?: string; paid?: boolean } | null;
+      const data = (await res.json().catch(() => null)) as {
+        message?: string;
+        paid?: boolean;
+      } | null;
       if (!res.ok || !data?.paid) {
         setIntentMessage(data?.message || "Payment could not be verified. Check the tx and try again.");
         return;
@@ -542,7 +563,12 @@ function Index() {
       <footer className="mt-auto pt-10">
         <p className="text-xs text-muted-foreground">
           Made by{" "}
-          <a href="https://x.com/naz3eh" target="_blank" rel="noopener noreferrer" className="text-foreground underline underline-offset-4 hover:text-open">
+          <a
+            href="https://x.com/naz3eh"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-foreground underline underline-offset-4 hover:text-open"
+          >
             Nazeeh
           </a>
         </p>

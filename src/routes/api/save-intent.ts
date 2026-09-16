@@ -32,7 +32,7 @@ export const Route = createFileRoute("/api/save-intent")({
           (typeof body.txHash === "string" && body.txHash.trim()) ||
           "";
 
-        if (!email || !/^\S+@\S+\.\S+$/.test(email) || email.length > 255) {
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
           return bad("Enter a valid email.");
         }
         if (!name || name.length > 63 || !/^[a-z0-9-]+$/.test(name)) {
