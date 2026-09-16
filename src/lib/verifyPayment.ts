@@ -1,12 +1,16 @@
 /**
  * Server-side Ethereum mainnet payment verification for Stillopen.
  * Uses a public JSON-RPC endpoint (no Etherscan key required).
+ *
+ * Requires: successful USDC (or ETH) payment to CRYPTO_PAY_ADDRESS,
+ * recent block timestamp, and tx.from matching the connected wallet.
  */
 import {
   CRYPTO_PAY_ADDRESS,
   CRYPTO_PAY_AMOUNT_USD,
   ERC20_TRANSFER_TOPIC,
   ETH_USD_TOLERANCE,
+  MAX_TX_AGE_SECONDS,
   MIN_USDC_UNITS,
   normalizeAddress,
   parseTxHash,
@@ -16,8 +20,8 @@ import {
 const RPC_URLS = [
   process.env.ETH_RPC_URL,
   "https://ethereum.publicnode.com",
+  "https://1rpc.io/eth",
   "https://cloudflare-eth.com",
-  "https://rpc.ankr.com/eth",
 ].filter(Boolean) as string[];
 
 export type VerifyOk = {
@@ -25,6 +29,7 @@ export type VerifyOk = {
   txHash: string;
   asset: "USDC" | "ETH";
   amountLabel: string;
+  from: string;
 };
 
 export type VerifyFail = {
@@ -37,6 +42,8 @@ export type VerifyResult = VerifyOk | VerifyFail;
 type RpcReceipt = {
   status?: string;
   to?: string | null;
+  blockNumber?: string;
+  from?: string;
   logs?: Array<{
     address: string;
     topics: string[];
@@ -47,6 +54,11 @@ type RpcReceipt = {
 type RpcTx = {
   to?: string | null;
   value?: string;
+  from?: string;
+} | null;
+
+type RpcBlock = {
+  timestamp?: string;
 } | null;
 
 async function rpc<T>(method: string, params: unknown[]): Promise<T> {
@@ -88,7 +100,6 @@ async function ethUsdPrice(): Promise<number> {
 }
 
 function topicAddress(topic: string): string {
-  // topics are 32-byte hex; address is last 20 bytes
   return normalizeAddress("0x" + topic.slice(-40));
 }
 
@@ -110,15 +121,21 @@ function formatUsdc(units: bigint): string {
 }
 
 /**
- * Verify a mainnet tx paid at least ~$9 USDC or ETH to CRYPTO_PAY_ADDRESS.
+ * Verify a mainnet tx paid at least ~$9 USDC (preferred) or ETH to CRYPTO_PAY_ADDRESS.
+ * expectedFrom: connected wallet that must match tx.from (anti-reuse of others' old txs).
  */
-export async function verifyCryptoPayment(txInput: string): Promise<VerifyResult> {
+export async function verifyCryptoPayment(
+  txInput: string,
+  expectedFrom: string,
+): Promise<VerifyResult> {
   const txHash = parseTxHash(txInput);
   if (!txHash) {
-    return {
-      ok: false,
-      message: "Paste a full tx hash (0x…) or an Etherscan tx link.",
-    };
+    return { ok: false, message: "Missing transaction hash from your wallet payment." };
+  }
+
+  const expected = normalizeAddress(expectedFrom);
+  if (!/^0x[a-f0-9]{40}$/.test(expected)) {
+    return { ok: false, message: "Connect your wallet and pay from it first." };
   }
 
   const payTo = normalizeAddress(CRYPTO_PAY_ADDRESS);
@@ -132,10 +149,7 @@ export async function verifyCryptoPayment(txInput: string): Promise<VerifyResult
       rpc<RpcTx>("eth_getTransactionByHash", [txHash]),
     ]);
   } catch {
-    return {
-      ok: false,
-      message: "Could not reach Ethereum. Try again in a minute.",
-    };
+    return { ok: false, message: "Could not reach Ethereum. Try again in a minute." };
   }
 
   if (!receipt || !tx) {
@@ -149,7 +163,32 @@ export async function verifyCryptoPayment(txInput: string): Promise<VerifyResult
     return { ok: false, message: "That transaction failed on-chain. It does not count as payment." };
   }
 
-  // USDC Transfer logs to pay address
+  const from = normalizeAddress(tx.from || receipt.from || "");
+  if (!from || from !== expected) {
+    return {
+      ok: false,
+      message: "That tx was not sent from your connected wallet. Pay $9 USDC from this wallet.",
+    };
+  }
+
+  if (!receipt.blockNumber) {
+    return { ok: false, message: "Transaction is not confirmed yet. Wait a moment and retry." };
+  }
+
+  try {
+    const block = await rpc<RpcBlock>("eth_getBlockByNumber", [receipt.blockNumber, false]);
+    const ts = parseHexBigInt(block?.timestamp || "0x0");
+    const age = BigInt(Math.floor(Date.now() / 1000)) - ts;
+    if (ts === 0n || age > BigInt(MAX_TX_AGE_SECONDS) || age < -120n) {
+      return {
+        ok: false,
+        message: "That payment is too old. Connect your wallet and send a fresh $9 USDC payment.",
+      };
+    }
+  } catch {
+    return { ok: false, message: "Could not check transaction age. Try again." };
+  }
+
   let usdcReceived = 0n;
   for (const log of receipt.logs || []) {
     if (normalizeAddress(log.address) !== usdc) continue;
@@ -157,8 +196,7 @@ export async function verifyCryptoPayment(txInput: string): Promise<VerifyResult
       continue;
     }
     if (log.topics.length < 3) continue;
-    const to = topicAddress(log.topics[2]);
-    if (to !== payTo) continue;
+    if (topicAddress(log.topics[2]) !== payTo) continue;
     usdcReceived += parseHexBigInt(log.data);
   }
 
@@ -168,10 +206,10 @@ export async function verifyCryptoPayment(txInput: string): Promise<VerifyResult
       txHash,
       asset: "USDC",
       amountLabel: formatUsdc(usdcReceived),
+      from,
     };
   }
 
-  // Native ETH to pay address
   const txTo = tx.to ? normalizeAddress(tx.to) : "";
   const valueWei = parseHexBigInt(tx.value || "0x0");
   if (txTo === payTo && valueWei > 0n) {
@@ -181,36 +219,29 @@ export async function verifyCryptoPayment(txInput: string): Promise<VerifyResult
     } catch {
       return {
         ok: false,
-        message: "Could not price ETH right now. Pay with USDC, or try again shortly.",
+        message: "Could not price ETH. Pay with USDC from your wallet instead.",
       };
     }
-    const weiPerEth = 10n ** 18n;
-    // requiredWei = ($9 * tolerance) / ethUsd * 1e18
     const requiredUsd = CRYPTO_PAY_AMOUNT_USD * ETH_USD_TOLERANCE;
     const requiredWei = BigInt(Math.ceil((requiredUsd / ethUsd) * 1e18));
     if (valueWei >= requiredWei) {
-      return {
-        ok: true,
-        txHash,
-        asset: "ETH",
-        amountLabel: formatEth(valueWei),
-      };
+      return { ok: true, txHash, asset: "ETH", amountLabel: formatEth(valueWei), from };
     }
     return {
       ok: false,
-      message: `ETH payment is under $${CRYPTO_PAY_AMOUNT_USD} (got ${formatEth(valueWei)} at ~$${ethUsd.toFixed(0)}/ETH). Send at least ~$${CRYPTO_PAY_AMOUNT_USD} worth.`,
+      message: `ETH payment is under $${CRYPTO_PAY_AMOUNT_USD} (got ${formatEth(valueWei)}).`,
     };
   }
 
   if (usdcReceived > 0n) {
     return {
       ok: false,
-      message: `USDC to ${CRYPTO_PAY_ADDRESS.slice(0, 10)}… was only ${formatUsdc(usdcReceived)}. Need at least ${CRYPTO_PAY_AMOUNT_USD} USDC.`,
+      message: `USDC received was only ${formatUsdc(usdcReceived)}. Need at least ${CRYPTO_PAY_AMOUNT_USD} USDC.`,
     };
   }
 
   return {
     ok: false,
-    message: `No $${CRYPTO_PAY_AMOUNT_USD} USDC or ETH payment to nazeeh.eth (${CRYPTO_PAY_ADDRESS.slice(0, 10)}…) found in that tx.`,
+    message: `No $${CRYPTO_PAY_AMOUNT_USD} USDC payment to nazeeh.eth found in that tx.`,
   };
 }

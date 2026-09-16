@@ -1,11 +1,11 @@
 /** Interim crypto checkout while Dodo Payments is pending. */
 export const CRYPTO_PAY_ENS = "nazeeh.eth";
-export const CRYPTO_PAY_ADDRESS = "0x0c12522fcda861460bf1bc223eca108144ee5df4";
+export const CRYPTO_PAY_ADDRESS = "0x0c12522fcda861460bf1bc223eca108144ee5df4" as const;
 export const CRYPTO_PAY_AMOUNT_USD = 9;
-export const CRYPTO_PAY_ASSETS = "USDC (Ethereum) or ETH";
+export const CRYPTO_PAY_ASSETS = "USDC (Ethereum)";
 
 /** Ethereum mainnet USDC (Circle). */
-export const USDC_ETH_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+export const USDC_ETH_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as const;
 
 /** keccak256("Transfer(address,address,uint256)") */
 export const ERC20_TRANSFER_TOPIC =
@@ -14,8 +14,11 @@ export const ERC20_TRANSFER_TOPIC =
 export const USDC_DECIMALS = 6;
 export const MIN_USDC_UNITS = BigInt(CRYPTO_PAY_AMOUNT_USD) * 10n ** BigInt(USDC_DECIMALS);
 
-/** Allow ~5% under $9 for ETH price drift / gas rounding. */
+/** Allow ~5% under $9 for ETH price drift (ETH fallback path). */
 export const ETH_USD_TOLERANCE = 0.95;
+
+/** Reject txs older than this so random historical payments cannot be reused. */
+export const MAX_TX_AGE_SECONDS = 60 * 30; // 30 minutes
 
 const TX_HASH_RE = /0x[a-fA-F0-9]{64}/;
 

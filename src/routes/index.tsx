@@ -1,21 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Copy, Moon, Share2, Sun } from "lucide-react";
-import {
-  CRYPTO_PAY_ADDRESS,
-  CRYPTO_PAY_AMOUNT_USD,
-  CRYPTO_PAY_ASSETS,
-  CRYPTO_PAY_ENS,
-  parseTxHash,
-} from "@/lib/cryptoPay";
+import { CRYPTO_PAY_AMOUNT_USD, CRYPTO_PAY_ENS } from "@/lib/cryptoPay";
 import { useEffect, useState, type FormEvent } from "react";
 import { copyShareCard, shareOnX } from "@/lib/shareOnX";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { PayModal } from "@/components/PayModal";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -146,7 +134,7 @@ function ReportTeaser({ name, onOpen }: { name: string; onOpen: () => void }) {
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         A shareable report for “{name}” — every lookup, timestamped, in one link you can send to a
-        co-founder. Pay with crypto to {CRYPTO_PAY_ENS}.
+        co-founder. Connect your wallet and pay {"$"}{CRYPTO_PAY_AMOUNT_USD} USDC to {CRYPTO_PAY_ENS}.
       </p>
       <button
         type="button"
@@ -156,126 +144,6 @@ function ReportTeaser({ name, onOpen }: { name: string; onOpen: () => void }) {
         Get the {"$"}{CRYPTO_PAY_AMOUNT_USD} report
       </button>
     </section>
-  );
-}
-
-function PayModal({
-  open,
-  onOpenChange,
-  name,
-  email,
-  setEmail,
-  txLink,
-  setTxLink,
-  onSubmit,
-  sending,
-  message,
-  onCopyPayTo,
-  copyHint,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  name: string;
-  email: string;
-  setEmail: (v: string) => void;
-  txLink: string;
-  setTxLink: (v: string) => void;
-  onSubmit: (e: FormEvent) => void;
-  sending: boolean;
-  message: string;
-  onCopyPayTo: () => void;
-  copyHint: string;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-card sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-display text-left text-xl font-bold text-foreground">
-            Pay {"$"}{CRYPTO_PAY_AMOUNT_USD} for “{name}”
-          </DialogTitle>
-          <DialogDescription className="text-left text-sm text-muted-foreground">
-            Send crypto, paste the transaction link, and we verify it on Ethereum before emailing
-            the report.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="rounded-lg border border-border bg-muted/50 p-4">
-          <p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
-            Send {"$"}{CRYPTO_PAY_AMOUNT_USD} in {CRYPTO_PAY_ASSETS}
-          </p>
-          <p className="mt-2 text-sm text-foreground">
-            To <span className="font-mono font-bold">{CRYPTO_PAY_ENS}</span>
-          </p>
-          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{CRYPTO_PAY_ADDRESS}</p>
-          <button
-            type="button"
-            onClick={onCopyPayTo}
-            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold tracking-wide text-foreground uppercase transition-colors hover:border-open hover:text-open"
-          >
-            <Copy className="size-3.5" aria-hidden />
-            Copy {CRYPTO_PAY_ENS}
-          </button>
-          {copyHint && (
-            <p className="mt-2 text-xs text-muted-foreground" role="status">
-              {copyHint}
-            </p>
-          )}
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Ethereum mainnet only. We check the tx on-chain (USDC transfer or ETH to this address ≥ ~$
-            {CRYPTO_PAY_AMOUNT_USD}).
-          </p>
-        </div>
-
-        <form onSubmit={onSubmit} className="space-y-3">
-          <div>
-            <label
-              htmlFor="pay-email"
-              className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase"
-            >
-              Email for the report
-            </label>
-            <input
-              id="pay-email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              maxLength={255}
-              className="w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-base text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="tx-link"
-              className="mb-1 block font-mono text-xs tracking-widest text-muted-foreground uppercase"
-            >
-              Transaction link (required)
-            </label>
-            <input
-              id="tx-link"
-              type="text"
-              required
-              value={txLink}
-              onChange={(e) => setTxLink(e.target.value)}
-              placeholder="https://etherscan.io/tx/0x… or 0x…"
-              maxLength={200}
-              spellCheck={false}
-              autoCapitalize="off"
-              className="w-full rounded-lg border border-input bg-background px-4 py-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-open focus:outline-none"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={sending}
-            className="w-full rounded-lg border-2 border-open px-5 py-3 text-base font-bold tracking-wide text-open uppercase transition-colors hover:bg-open hover:text-primary-foreground disabled:opacity-60"
-          >
-            {sending ? "Verifying payment…" : "Verify payment & request report"}
-          </button>
-          {message && <p className="text-sm text-muted-foreground">{message}</p>}
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -319,10 +187,6 @@ function Index() {
 
   const [payOpen, setPayOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [txLink, setTxLink] = useState("");
-  const [intentMessage, setIntentMessage] = useState("");
-  const [sendingIntent, setSendingIntent] = useState(false);
-  const [payCopyHint, setPayCopyHint] = useState("");
 
   const [sharing, setSharing] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -343,8 +207,6 @@ function Index() {
     setChecking(true);
     setResults(null);
     setCheckedName(trimmed);
-    setIntentMessage("");
-    setTxLink("");
     setShareHint("");
     try {
       const res = await fetch("/api/check", {
@@ -360,62 +222,6 @@ function Index() {
     } finally {
       setChecking(false);
     }
-  }
-
-  async function saveIntent(e: FormEvent) {
-    e.preventDefault();
-    const trimmedEmail = email.trim();
-    const trimmedTx = txLink.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail) || trimmedEmail.length > 255) {
-      setIntentMessage("Enter a valid email.");
-      return;
-    }
-    if (!parseTxHash(trimmedTx)) {
-      setIntentMessage("Paste a full Etherscan tx link or 0x… hash.");
-      return;
-    }
-    setSendingIntent(true);
-    setIntentMessage("");
-    try {
-      const res = await fetch("/api/save-intent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          name: checkedName || "stillopen",
-          txLink: trimmedTx,
-          paymentMethod: "crypto",
-        }),
-      });
-      const data = (await res.json().catch(() => null)) as {
-        message?: string;
-        paid?: boolean;
-      } | null;
-      if (!res.ok || !data?.paid) {
-        setIntentMessage(data?.message || "Payment could not be verified. Check the tx and try again.");
-        return;
-      }
-      setIntentMessage(data.message || "Payment verified. Report email coming.");
-    } catch {
-      setIntentMessage("Could not reach the server. Try again.");
-    } finally {
-      setSendingIntent(false);
-    }
-  }
-
-  async function copyPayTo() {
-    try {
-      await navigator.clipboard.writeText(CRYPTO_PAY_ENS);
-      setPayCopyHint("Copied nazeeh.eth.");
-    } catch {
-      try {
-        await navigator.clipboard.writeText(CRYPTO_PAY_ADDRESS);
-        setPayCopyHint("Copied wallet address.");
-      } catch {
-        setPayCopyHint("Could not copy. Select the address above.");
-      }
-    }
-    window.setTimeout(() => setPayCopyHint(""), 3000);
   }
 
   async function handleShareOnX() {
@@ -551,13 +357,6 @@ function Index() {
         name={reportName}
         email={email}
         setEmail={setEmail}
-        txLink={txLink}
-        setTxLink={setTxLink}
-        onSubmit={saveIntent}
-        sending={sendingIntent}
-        message={intentMessage}
-        onCopyPayTo={copyPayTo}
-        copyHint={payCopyHint}
       />
 
       <footer className="mt-auto pt-10">
